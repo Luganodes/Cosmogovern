@@ -1,0 +1,19 @@
+{
+  "name": "cosmogovern",
+  "module": "src/cli/index.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@cosmjs/proto-signing": "^0.32.4",
+    "@cosmjs/stargate": "^0.32.4",
+    "mathjs": "^13.0.2",
+    "pino": "^9.3.0",
+    "pino-pretty": "^11.2.1",
+    "toml": "^3.0.0"
+  }
+}
