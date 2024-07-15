@@ -1,42 +1,67 @@
 import { DirectSecp256k1HdWallet } from "@cosmjs/proto-signing";
 import { stringToPath } from "@cosmjs/crypto";
-import type { Keys } from "../../interface";
-import { join } from "path"
+import { join } from "path";
+import fs from "fs/promises";
 import { CONSTANT, ENV } from "../../constants";
-import fs from "fs/promises"
 import logger from "../log";
+import type { Keys } from "../../interface";
+
+const log = logger("manager:key");
 
 
-const log = logger("manager:key")
+
+type KeyData = {
+    [key: string]: string;
+};
 
 export class KeyManager {
-    private keypath: string
+    private readonly keypath: string;
     private keys: Map<string, string> = new Map();
 
-
     constructor() {
-        this.keypath = join(ENV.HOME_DIR_PATH, CONSTANT.KEY_FOLDER)
-        this.loadKeys()
+        this.keypath = join(ENV.HOME_DIR_PATH, CONSTANT.KEY_FOLDER);
+        this.initialize();
     }
 
-    public async createNewMnemonics(): Promise<string> {
-        const { mnemonic } = await DirectSecp256k1HdWallet.generate(24)
-        return mnemonic
+    private async initialize(): Promise<void> {
+        try {
+            await this.ensureKeyDirectoryExists();
+            await this.loadKeys();
+        } catch (error) {
+            log.error("Failed to initialize KeyManager:", error);
+            throw new Error(`KeyManager initialization failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
     }
 
-    public async convertMnemonicsTokey(
+    private async ensureKeyDirectoryExists(): Promise<void> {
+        try {
+            await fs.mkdir(this.keypath, { recursive: true });
+        } catch (error) {
+            throw new Error(`Failed to create key directory: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
+
+    public async createNewMnemonics(strength: 12 | 15 | 18 | 21 | 24 = 24): Promise<string> {
+        try {
+            const { mnemonic } = await DirectSecp256k1HdWallet.generate(strength);
+            return mnemonic;
+        } catch (error) {
+            throw new Error(`Failed to generate new mnemonics: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
+
+    public async convertMnemonicsToKey(
         mnemonics: string,
         hdPath: string,
         prefix: string
     ): Promise<DirectSecp256k1HdWallet> {
         try {
-            const signer = await DirectSecp256k1HdWallet.fromMnemonic(mnemonics, {
+            return await DirectSecp256k1HdWallet.fromMnemonic(mnemonics, {
                 prefix: prefix,
                 hdPaths: [stringToPath(hdPath)],
             });
-            return signer;
         } catch (error) {
-            throw new Error(`Failed to convert mnemonics to key: ${error}`);
+            throw new Error(`Failed to convert mnemonics to key: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
 
@@ -47,13 +72,17 @@ export class KeyManager {
             const exists = await this.fileExists(filePath);
 
             if (exists) {
-                log.info(`File ${filePath} already exists.`);
-                return
+                log.warn(`File ${filePath} already exists. Skipping write operation.`);
+                return;
             }
+
             await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
             log.info(`Keys data written to ${filePath}`);
+
+            // Update the in-memory keys map
+            this.keys.set(data.name, data.mnemonics);
         } catch (error) {
-            throw new Error(`Failed to write keys data to file: ${error}`);
+            throw new Error(`Failed to write keys data to file: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
 
@@ -81,12 +110,23 @@ export class KeyManager {
             }));
             log.info(`Loaded ${this.keys.size} keys`);
         } catch (error) {
-            throw new Error(`Failed to load keys from folder: ${error}`);
+            throw new Error(`Failed to load keys from folder: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
 
     public findKeyByName(name: string): string | undefined {
-        return this.keys.get(name);
+        const key = this.keys.get(name);
+        if (!key) {
+            log.warn(`Key not found for name: ${name}`);
+        }
+        return key;
     }
 
+    public getAllKeys(): KeyData {
+        const keyData: KeyData = {};
+        this.keys.forEach((value, key) => {
+            keyData[key] = value;
+        });
+        return keyData;
+    }
 }

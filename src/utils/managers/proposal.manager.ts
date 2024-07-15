@@ -1,132 +1,199 @@
-import { DirectSecp256k1HdWallet } from "@cosmjs/proto-signing";
-import { stringToPath } from "@cosmjs/crypto";
-import { join } from "path";
-import fs from "fs/promises";
-import { CONSTANT, ENV } from "../../constants";
+import axios, { AxiosError, type AxiosRequestConfig } from "axios";
 import logger from "../log";
-import type { Keys } from "../../interface";
 
-const log = logger("manager:key");
+const log = logger("utils:query-client");
+
+interface ProposalBase {
+  id: string;
+  title: string;
+  voting_end_time: string;
+  voting_start_time: string;
+}
+
+interface ProposalV1 extends ProposalBase {}
+
+interface ProposalV1Beta1 extends ProposalBase {
+  proposal_id: string;
+  content: {
+    title: string;
+  };
+}
+
+type Proposal = ProposalV1 | ProposalV1Beta1;
+
+enum ProposalStatus {
+  UNSPECIFIED = 0,
+  DEPOSIT_PERIOD = 1,
+  VOTING_PERIOD = 2,
+  PASSED = 3,
+  REJECTED = 4,
+  FAILED = 5,
+}
+
+interface VoteResponse {
+    vote?: {
+      proposal_id: string;
+      voter: string;
+      options: Array<{
+        option: string;
+        weight: string;
+      }>;
+      metadata: string;
+    };
+  }
+
+export class VoteNotFoundError extends Error {
+    constructor(public proposalId: string, public granter: string) {
+      super(`Vote not found for granter ${granter} on proposal ${proposalId}`);
+      this.name = 'VoteNotFoundError';
+    }
+  }
 
 
-
-type KeyData = {
-    [key: string]: string;
-};
-
-export class KeyManager {
-    private readonly keypath: string;
-    private keys: Map<string, string> = new Map();
-
-    constructor() {
-        this.keypath = join(ENV.HOME_DIR_PATH, CONSTANT.KEY_FOLDER);
-        this.initialize();
+export class ProposalQueryClient {
+    private readonly api: string;
+    private readonly v1: boolean;
+    private readonly granter: string;
+    private readonly timeout: number;
+    private readonly maxRetries: number;
+  
+    constructor(apiUrl: string, useV1: boolean, granter: string, timeoutMs: number = 10000, maxRetries: number = 3) {
+      if (!apiUrl || typeof apiUrl !== 'string') {
+        throw new Error("Invalid API URL provided");
+      }
+      this.api = apiUrl.trim();
+      this.v1 = useV1;
+      this.granter = granter;
+      this.timeout = timeoutMs;
+      this.maxRetries = maxRetries;
     }
 
-    private async initialize(): Promise<void> {
-        try {
-            await this.ensureKeyDirectoryExists();
-            await this.loadKeys();
-        } catch (error) {
-            log.error("Failed to initialize KeyManager:", error);
-            throw new Error(`KeyManager initialization failed: ${error instanceof Error ? error.message : String(error)}`);
+  private getProposalUrl(): string {
+    return this.v1
+      ? `${this.api}/cosmos/gov/v1/proposals`
+      : `${this.api}/cosmos/gov/v1beta1/proposals`;
+  }
+
+  public async fetchProposals(status: ProposalStatus = ProposalStatus.VOTING_PERIOD): Promise<Proposal[]> {
+    const url = `${this.getProposalUrl()}?proposal_status=${status}`;
+    const config: AxiosRequestConfig = {
+      timeout: this.timeout,
+      validateStatus: (status) => status === 200,
+    };
+
+    try {
+      const response = await axios.get(url, config);
+      return this.parseProposals(response.data);
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
+  public getMessageType(): string {
+    return this.v1 ? "/cosmos.gov.v1.MsgVote" : "/cosmos.gov.v1beta1.MsgVote";
+  }
+
+  private parseProposals(data: any): Proposal[] {
+    if (!data || !data.proposals || !Array.isArray(data.proposals)) {
+      log.warn(`No valid proposals found in the response from: ${this.api}`);
+      return [];
+    }
+
+    const proposals = data.proposals;
+    log.info(`Found ${proposals.length} Proposals from: ${this.api}`);
+    return this.v1 ? this.parseV1Proposals(proposals) : this.parseV1Beta1Proposals(proposals);
+  }
+
+  private parseV1Proposals(proposals: any[]): ProposalV1[] {
+    return proposals.map((proposal): ProposalV1 => ({
+      id: proposal.id,
+      title: proposal.title,
+      voting_end_time: proposal.voting_end_time,
+      voting_start_time: proposal.voting_start_time,
+    }));
+  }
+
+  private parseV1Beta1Proposals(proposals: any[]): ProposalV1Beta1[] {
+    return proposals.map((proposal): ProposalV1Beta1 => ({
+      id: proposal.proposal_id,
+      proposal_id: proposal.proposal_id,
+      title: proposal.content.title,
+      content: { title: proposal.content.title },
+      voting_end_time: proposal.voting_end_time,
+      voting_start_time: proposal.voting_start_time,
+    }));
+  }
+
+  private handleError(error: unknown): Error {
+    if (axios.isAxiosError(error)) {
+      const axiosError = error as AxiosError;
+      if (axiosError.response) {
+        return new Error(`API request failed: ${axiosError.response.status} ${axiosError.response.statusText}`);
+      } else if (axiosError.request) {
+        if (axiosError.code === 'ECONNABORTED') {
+          return new Error(`Request timed out after ${this.timeout}ms: ${this.api}`);
         }
+        return new Error(`No response received from the server: ${this.api}`);
+      } else {
+        return new Error(`Error setting up the request: ${axiosError.message}`);
+      }
     }
+    return error instanceof Error ? error : new Error(`An unknown error occurred: ${String(error)}`);
+  }
 
-    private async ensureKeyDirectoryExists(): Promise<void> {
-        try {
-            await fs.mkdir(this.keypath, { recursive: true });
-        } catch (error) {
-            throw new Error(`Failed to create key directory: ${error instanceof Error ? error.message : String(error)}`);
+  public async checkIfVotedByGranter(proposalId: string): Promise<boolean> {
+    const url = `${this.api}/cosmos/gov/v1/proposals/${proposalId}/votes/${this.granter}`;
+    const config: AxiosRequestConfig = {
+      timeout: this.timeout,
+      validateStatus: (status) => status === 200 || status === 400 || status === 404,
+    };
+
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        const response = await axios.get<VoteResponse>(url, config);
+        
+        if (response.status === 200 && response.data.vote) {
+          log.info(`Granter ${this.granter} has voted on proposal ${proposalId}`);
+          return true;
+        } else if (response.status === 400 || response.status === 404) {
+          log.info(`Granter ${this.granter} has not voted on proposal ${proposalId}`);
+          return false;
+        } else {
+          throw new Error(`Unexpected response status: ${response.status}`);
         }
-    }
-
-    public async createNewMnemonics(strength: 12 | 15 | 18 | 21 | 24 = 24): Promise<string> {
-        try {
-            const { mnemonic } = await DirectSecp256k1HdWallet.generate(strength);
-            return mnemonic;
-        } catch (error) {
-            throw new Error(`Failed to generate new mnemonics: ${error instanceof Error ? error.message : String(error)}`);
+      } catch (error) {
+        if (attempt === this.maxRetries) {
+          throw this.handleVoteCheckError(error, proposalId);
         }
+        log.warn(`Attempt ${attempt} failed, retrying...`);
+        await this.delay(1000 * attempt); // Exponential backoff
+      }
     }
 
-    public async convertMnemonicsToKey(
-        mnemonics: string,
-        hdPath: string,
-        prefix: string
-    ): Promise<DirectSecp256k1HdWallet> {
-        try {
-            return await DirectSecp256k1HdWallet.fromMnemonic(mnemonics, {
-                prefix: prefix,
-                hdPaths: [stringToPath(hdPath)],
-            });
-        } catch (error) {
-            throw new Error(`Failed to convert mnemonics to key: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error("Unexpected error: all retries failed");
+  }
+
+  private handleVoteCheckError(error: unknown, proposalId: string): Error {
+    if (axios.isAxiosError(error)) {
+      const axiosError = error as AxiosError;
+      if (axiosError.response) {
+        if (axiosError.response.status === 400 || axiosError.response.status === 404) {
+          return new VoteNotFoundError(proposalId, this.granter);
         }
-    }
-
-    public async writeKeysDataToFile(keyname: string, data: Keys): Promise<void> {
-        const filePath = join(this.keypath, `${keyname}.json`);
-
-        try {
-            const exists = await this.fileExists(filePath);
-
-            if (exists) {
-                log.warn(`File ${filePath} already exists. Skipping write operation.`);
-                return;
-            }
-
-            await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
-            log.info(`Keys data written to ${filePath}`);
-
-            // Update the in-memory keys map
-            this.keys.set(data.name, data.mnemonics);
-        } catch (error) {
-            throw new Error(`Failed to write keys data to file: ${error instanceof Error ? error.message : String(error)}`);
+        return new Error(`API request failed: ${axiosError.response.status} ${axiosError.response.statusText}`);
+      } else if (axiosError.request) {
+        if (axiosError.code === 'ECONNABORTED') {
+          return new Error(`Request timed out after ${this.timeout}ms: ${this.api}`);
         }
+        return new Error(`No response received from the server: ${this.api}`);
+      } else {
+        return new Error(`Error setting up the request: ${axiosError.message}`);
+      }
     }
+    return error instanceof Error ? error : new Error(`An unknown error occurred: ${String(error)}`);
+  }
 
-    private async fileExists(filePath: string): Promise<boolean> {
-        try {
-            await fs.access(filePath);
-            return true;
-        } catch {
-            return false;
-        }
-    }
-
-    private async loadKeys(): Promise<void> {
-        try {
-            const files = await fs.readdir(this.keypath);
-            this.keys.clear();
-
-            await Promise.all(files.map(async (file) => {
-                if (file.endsWith('.json')) {
-                    const filePath = join(this.keypath, file);
-                    const data = await fs.readFile(filePath, 'utf-8');
-                    const keyData: Keys = JSON.parse(data);
-                    this.keys.set(keyData.name, keyData.mnemonics);
-                }
-            }));
-            log.info(`Loaded ${this.keys.size} keys`);
-        } catch (error) {
-            throw new Error(`Failed to load keys from folder: ${error instanceof Error ? error.message : String(error)}`);
-        }
-    }
-
-    public findKeyByName(name: string): string | undefined {
-        const key = this.keys.get(name);
-        if (!key) {
-            log.warn(`Key not found for name: ${name}`);
-        }
-        return key;
-    }
-
-    public getAllKeys(): KeyData {
-        const keyData: KeyData = {};
-        this.keys.forEach((value, key) => {
-            keyData[key] = value;
-        });
-        return keyData;
-    }
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
 }

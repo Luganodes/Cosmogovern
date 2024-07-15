@@ -1,6 +1,3 @@
-
-
-
 export interface Explorer {
     proposal: string;
     tx: string;
@@ -30,7 +27,6 @@ export interface Toml {
     telegram: Telegram[];
     network: Network[];
 }
-
 
 export interface Keys {
     name: string;
