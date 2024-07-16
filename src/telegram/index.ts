@@ -20,42 +20,27 @@ export class Telegram {
         this.bot = new Bot(token);
         this.actions = actions;
         this.database = new DatabaseManager();
-        this.setupHandlers()
+        this.bot.on("callback_query:data", this.handleVoting.bind(this)); 
     }
 
-    private setupHandlers() {
-
-        this.bot.command("start", this.handleStart.bind(this));
-        this.bot.on("callback_query:data", this.handleVoting.bind(this));
-    }
-
-    private async handleStart(ctx: Context) {
-        try {
-            log.info(`Bot started. Monitoring proposals every ${ENV.MONITORING_INTERVAL} minutes...`);
-            await this.startProposalMonitoring();
-        } catch (error) {
-            log.error("Error starting bot:", error);
-        }
-    }
-
-
+  
     private async handleVoting(ctx: Context): Promise<void> {
         if (!ctx.callbackQuery?.data) {
             await this.handleVoteError(ctx, new Error("Invalid callback query"));
             return;
         }
 
-        const [proposalId, chainId, vote] = ctx.callbackQuery.data.split(":");
+        const [proposalId, chainname, vote] = ctx.callbackQuery.data.split(":");
         const username = ctx.from?.username;
         const messageId = ctx.callbackQuery.message?.message_id;
 
-        if (!proposalId || !chainId || !vote || !username || !messageId) {
+        if (!proposalId || !chainname || !vote || !username || !messageId) {
             await this.handleVoteError(ctx, new Error("Incomplete vote data"));
             return;
         }
 
         try {
-            await this.processVote(proposalId, chainId, vote, username, messageId, ctx);
+            await this.processVote(proposalId, chainname, vote, username, messageId, ctx);
         } catch (error) {
             await this.handleVoteError(ctx, error);
         }
@@ -63,17 +48,17 @@ export class Telegram {
 
     private async processVote(
         proposalId: string,
-        chainId: string,
+        chainname: string,
         vote: string,
         username: string,
         messageId: number,
         ctx: Context
     ): Promise<void> {
-        log.info(`Vote received from telegram: ProposalID: ${proposalId}, ChainID: ${chainId}, Vote: ${vote}, User: ${username}`);
+        log.info(`Vote received from telegram: ProposalID: ${proposalId}, Chainname: ${chainname}, Vote: ${vote}, User: ${username}`);
 
-        const action = this.actions.find(action => action.chain_id === chainId);
+        const action = this.actions.find(action => action.chain_name === chainname);
         if (!action) {
-            throw new Error(`No action defined for chain: ${chainId}`);
+            throw new Error(`No action defined for chain: ${chainname}`);
         }
 
         const voteProcessed = await action.signer.voteOnProposal(proposalId, vote.trim());
@@ -99,7 +84,9 @@ export class Telegram {
         const replyMessage = this.createVoteConfirmationMessage(action, proposalId, username, vote, voteProcessed.txHash!);
         await ctx.reply(replyMessage, {
             parse_mode: "Markdown",
-            reply_parameters: { message_id: messageId }
+            reply_parameters:{
+                message_id:messageId
+            }
         });
     }
 
@@ -133,14 +120,17 @@ export class Telegram {
             return [];
         }
     }
+        private async startProposalMonitoring2(): Promise<void>{
+            console.log("hello")
+        }
+
 
     private async startProposalMonitoring(): Promise<void> {
-        
         const interval = Number(ENV.MONITORING_INTERVAL) * 60000;
-       
+        log.info(`Bot started. Monitoring proposals every ${ENV.MONITORING_INTERVAL} minutes...`);
+
 
         setInterval(async () => {
-            log.info("Started new cycle of monitoring proposals");
             for (const action of this.actions) {
                 try {
                     const proposals = await this.checkForNewProposals(action.query);
@@ -152,7 +142,7 @@ export class Telegram {
                     await this.sendErrorAlert(error as Error, `Proposal Monitoring: ${action.chain_name}`, action.chat_id);
                 }
             }
-        }, 10000);
+        }, interval);
     }
 
     private async processProposal(action: Actionables, proposal: Proposal): Promise<void> {
@@ -198,7 +188,7 @@ export class Telegram {
             await this.bot.api.sendMessage(
                 action.chat_id,
                 `Please vote on the ${capitalize(action.chain_name)} proposal number: ${proposal.id}\n${ENV.TAG_IN_REPLAY}`,
-                { reply_parameters: { message_id: messageId } }
+                { reply_to_message_id: messageId }
             );
             log.info("Reminder message sent.");
         } catch (error) {
@@ -259,7 +249,6 @@ export class Telegram {
         const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
         log.error(`Error handling vote: ${errorMessage}`);
         await ctx.answerCallbackQuery({ text: "Error processing vote. Please try again." });
-        await ctx.reply(`❌ Vote submission failed: ${errorMessage}`, { parse_mode: "Markdown" });
         await this.sendErrorAlert(errorMessage, "Vote Error Handling", ctx.chat?.id.toString() || '');
     }
 
@@ -288,8 +277,8 @@ Please check the logs for more details.
     public async start(): Promise<void> {
         try {
             log.info("Telegram bot started successfully");
-            await this.bot.start();
-            await this.startProposalMonitoring();
+            this.bot.start();
+            await this.startProposalMonitoring();  
         } catch (error) {
             log.error("Failed to start Telegram bot:", error);
         }

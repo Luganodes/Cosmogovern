@@ -99,7 +99,7 @@ export class ConfigManager {
         log.warn(`No network found for chain ID: ${chainId}`);
       }
 
-      return network?.authz.v1_exec_type ? "/cosmos.gov.v1beta1.MsgVote" : "/cosmos.gov.v1.MsgVote";
+      return network?.authz.v1_exec_type ? "/cosmos.gov.v1.MsgVote" : "/cosmos.gov.v1beta1.MsgVote";
     }catch(error){
       throw new Error("Failed to get vote configuration");
     }
@@ -113,7 +113,7 @@ export class ConfigManager {
         log.warn(`No network found for chain ID: ${chainId}`);
       }
 
-      return network?.authz.v1_exec_type ? "/cosmos.authz.v1beta1.MsgExec" : "/cosmos.authz.v1.MsgExec";
+      return network?.authz.v1_exec_type ? "/cosmos.authz.v1.MsgExec" : "/cosmos.authz.v1beta1.MsgExec";
     }catch(error){
       throw new Error("Failed to get vote configuration");
     }

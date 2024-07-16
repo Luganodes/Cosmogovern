@@ -80,7 +80,7 @@ export class ProposalQueryManager {
         const v1Response = await axios.get(v1Url, config);
         if (v1Response.status === 200) {
           this.v1 = true;
-          log.info("Using cosmos/gov/v1 endpoint");
+          log.info(`Using cosmos/gov/v1 endpoint with ${this.api}`);
           return;
         }
       } catch (error) {
@@ -91,7 +91,7 @@ export class ProposalQueryManager {
         const v1beta1Response = await axios.get(v1beta1Url, config);
         if (v1beta1Response.status === 200) {
           this.v1 = false;
-          log.info("Using cosmos/gov/v1beta1 endpoint");
+          log.info(`Using cosmos/gov/v1beta1 endpoint with ${this.api}`);
           return;
         }
       } catch (error) {

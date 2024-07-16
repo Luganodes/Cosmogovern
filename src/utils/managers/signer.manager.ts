@@ -56,7 +56,7 @@ export class SignerManager {
             this.chainID = await this.client.getChainId();
             log.info(`SignerManager initialized with Stargate client. Chain ID: ${this.chainID}`);
         } catch (error) {
-            log.error('Failed to initialize SignerManager:', error);
+            log.error(`Failed to initialize SignerManager: ${error}`);
             throw new Error(`Initialization failed: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
@@ -179,7 +179,7 @@ export class SignerManager {
                 error: result.code !== 0 ? `Transaction failed with code ${result.code}` : undefined
             };
         } catch (error) {
-            log.error(`Error voting on proposal ${proposalId}:`, error);
+            log.error(`Error voting on proposal ${proposalId}: ${error}`,);
             return {
                 result: false,
                 error: error instanceof Error ? error.message : String(error)
