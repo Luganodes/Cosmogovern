@@ -14,7 +14,7 @@ type VoteType = "/cosmos.gov.v1beta1.MsgVote" | "/cosmos.gov.v1.MsgVote";
 type ExecType = "/cosmos.authz.v1beta1.MsgExec" | "/cosmos.authz.v1.MsgExec";
 type VoteOptionType = 'yes' | 'no' | 'veto' | 'abstain';
 
-interface VoteResult {
+export interface VoteResult {
     result: boolean;
     txHash?: string;
     error?: string;
@@ -61,7 +61,7 @@ export class SignerManager {
         }
     }
 
-    private async getAddress(): Promise<string> {
+    public async getAddress(): Promise<string> {
         const accounts = await this.wallet.getAccounts();
         if (accounts.length === 0) {
             throw new Error("No accounts found in the wallet");
@@ -111,7 +111,7 @@ export class SignerManager {
         };
     }
 
-    private convertTypeToVote(type: VoteOptionType): VoteOption {
+    private convertTypeToVote(type: string): VoteOption {
         switch (type) {
             case 'yes':
                 return VoteOption.VOTE_OPTION_YES;
@@ -150,7 +150,7 @@ export class SignerManager {
         }];
     }
 
-    public async voteOnProposal(proposalId: string | number, vote: VoteOptionType): Promise<VoteResult> {
+    public async voteOnProposal(proposalId: string | number, vote: string): Promise<VoteResult> {
         try {
             const account = await this.getAddress();
             const authzTransactionMessage = await this.createExecutionMessage(BigInt(proposalId), this.convertTypeToVote(vote));

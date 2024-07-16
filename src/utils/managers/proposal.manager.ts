@@ -1,7 +1,7 @@
 import axios, { AxiosError, type AxiosRequestConfig } from "axios";
 import logger from "../log";
 
-const log = logger("utils:query-client");
+const log = logger("manager:proposal");
 
 interface ProposalBase {
   id: string;
@@ -19,7 +19,7 @@ interface ProposalV1Beta1 extends ProposalBase {
   };
 }
 
-type Proposal = ProposalV1 | ProposalV1Beta1;
+export type Proposal = ProposalV1 | ProposalV1Beta1;
 
 enum ProposalStatus {
   UNSPECIFIED = 0,
@@ -50,22 +50,55 @@ export class VoteNotFoundError extends Error {
   }
 
 
-export class ProposalQueryClient {
+export class ProposalQueryManager {
     private readonly api: string;
-    private readonly v1: boolean;
+    private v1: boolean;
     private readonly granter: string;
     private readonly timeout: number;
     private readonly maxRetries: number;
   
-    constructor(apiUrl: string, useV1: boolean, granter: string, timeoutMs: number = 10000, maxRetries: number = 3) {
+    constructor(apiUrl: string, granter: string, timeoutMs: number = 10000, maxRetries: number = 3) {
       if (!apiUrl || typeof apiUrl !== 'string') {
         throw new Error("Invalid API URL provided");
       }
       this.api = apiUrl.trim();
-      this.v1 = useV1;
       this.granter = granter;
       this.timeout = timeoutMs;
+      this.v1 =false
       this.maxRetries = maxRetries;
+    }
+
+    public async checkVersion(): Promise<void> {
+      const v1Url = `${this.api}/cosmos/gov/v1/proposals?proposal_status=2`;
+      const v1beta1Url = `${this.api}/cosmos/gov/v1beta1/proposals?proposal_status=2`;
+      const config: AxiosRequestConfig = {
+        timeout: this.timeout,
+        validateStatus: (status) => status === 200 || status === 400,
+      };
+    
+      try {
+        const v1Response = await axios.get(v1Url, config);
+        if (v1Response.status === 200) {
+          this.v1 = true;
+          log.info("Using cosmos/gov/v1 endpoint");
+          return;
+        }
+      } catch (error) {
+        log.warn(`Error checking v1 endpoint:  ${error}`);
+      }
+    
+      try {
+        const v1beta1Response = await axios.get(v1beta1Url, config);
+        if (v1beta1Response.status === 200) {
+          this.v1 = false;
+          log.info("Using cosmos/gov/v1beta1 endpoint");
+          return;
+        }
+      } catch (error) {
+        log.warn(`Error checking v1beta1 endpoint: ${error}` );
+      }
+    
+      throw new Error("Neither v1 nor v1beta1 endpoints are supported by the API");
     }
 
   private getProposalUrl(): string {

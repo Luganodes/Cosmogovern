@@ -11,6 +11,7 @@
   "dependencies": {
     "@cosmjs/proto-signing": "^0.32.4",
     "@cosmjs/stargate": "^0.32.4",
+    "grammy": "^1.27.0",
     "mathjs": "^13.0.2",
     "pino": "^9.3.0",
     "pino-pretty": "^11.2.1",

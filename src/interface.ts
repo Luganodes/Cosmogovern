@@ -1,3 +1,6 @@
+import type { ProposalQueryManager } from "./utils/managers/proposal.manager";
+import type { SignerManager } from "./utils/managers/signer.manager";
+
 export interface Explorer {
     proposal: string;
     tx: string;
@@ -5,8 +8,8 @@ export interface Explorer {
 
 export interface Network {
     name: string;
-    chainId: string;
-    hdPath: string;
+    chain_id: string;
+    hd_path: string;
     denom: string;
     prefix: string;
     decimals: number;
@@ -14,13 +17,19 @@ export interface Network {
     api: string;
     rpc: string;
     explorer: Explorer;
-    granter: string;
-    telegramLabel: string;
+    authz: Authz;
+    telegram_label: string;
+}
+
+export interface Authz {
+    granter : string;
+    v1_vote_type : boolean;
+    v1_exec_type: boolean;
 }
 
 export interface Telegram {
     label: string;
-    chatId: string;
+    chat_id: string;
 }
 
 export interface Toml {
@@ -31,4 +40,14 @@ export interface Toml {
 export interface Keys {
     name: string;
     mnemonics: string;
+}
+
+export interface Actionables {
+    query: ProposalQueryManager;
+    signer: SignerManager;
+    chat_id: string;
+    chain_id:string;
+    chain_name:string,
+    proposal_explorer:string,
+    transaction_explorer:string
 }

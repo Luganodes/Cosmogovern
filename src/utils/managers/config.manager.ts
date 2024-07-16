@@ -64,7 +64,7 @@ export class ConfigManager {
       if (!telegramConfig) {
         log.warn(`No Telegram configuration found for label: ${label}`);
       }
-      return telegramConfig?.chatId;
+      return telegramConfig?.chat_id;
     } catch (error) {
       log.error(`Error getting Telegram chat by label: ${error instanceof Error ? error.message : String(error)}`);
       return undefined;
@@ -92,9 +92,38 @@ export class ConfigManager {
     return this.config.network;
   }
 
+  public getAuthVoteType(chainId:string): "/cosmos.gov.v1beta1.MsgVote" | "/cosmos.gov.v1.MsgVote" | undefined{
+    try {
+      const network = this.config.network.find((n) => n.chain_id === chainId);
+      if (!network) {
+        log.warn(`No network found for chain ID: ${chainId}`);
+      }
+
+      return network?.authz.v1_exec_type ? "/cosmos.gov.v1beta1.MsgVote" : "/cosmos.gov.v1.MsgVote";
+    }catch(error){
+      throw new Error("Failed to get vote configuration");
+    }
+
+  }
+
+  public getAuthExecType(chainId:string): "/cosmos.authz.v1beta1.MsgExec" | "/cosmos.authz.v1.MsgExec" | undefined{
+    try {
+      const network = this.config.network.find((n) => n.chain_id === chainId);
+      if (!network) {
+        log.warn(`No network found for chain ID: ${chainId}`);
+      }
+
+      return network?.authz.v1_exec_type ? "/cosmos.authz.v1beta1.MsgExec" : "/cosmos.authz.v1.MsgExec";
+    }catch(error){
+      throw new Error("Failed to get vote configuration");
+    }
+
+  }
+
+
   public getChainNetInfoById(chainId: string): Network | undefined {
     try {
-      const network = this.config.network.find((n) => n.chainId === chainId);
+      const network = this.config.network.find((n) => n.chain_id === chainId);
       if (!network) {
         log.warn(`No network found for chain ID: ${chainId}`);
       }
