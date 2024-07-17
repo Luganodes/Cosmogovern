@@ -1,5 +1,7 @@
 {
   "name": "cosmogovern",
+  "version": "0.0.1",
+  "description": "Self hosted telegram bot voting proposals for any cosmos chain",
   "module": "src/cli/index.ts",
   "type": "module",
   "devDependencies": {
@@ -11,6 +13,9 @@
   "dependencies": {
     "@cosmjs/proto-signing": "^0.32.4",
     "@cosmjs/stargate": "^0.32.4",
+    "@inquirer/confirm": "^3.1.14",
+    "@inquirer/password": "^2.1.14",
+    "commander": "^12.1.0",
     "grammy": "^1.27.0",
     "mathjs": "^13.0.2",
     "pino": "^9.3.0",

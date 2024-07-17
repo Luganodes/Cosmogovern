@@ -10,7 +10,7 @@ const log = logger("manager:key");
 
 
 
-type KeyData = {
+export type KeyData = {
     [key: string]: string;
 };
 
@@ -26,7 +26,6 @@ export class KeyManager {
     private async initialize(): Promise<void> {
         try {
             await this.ensureKeyDirectoryExists();
-            await this.loadKeys();
         } catch (error) {
             log.error("Failed to initialize KeyManager:", error);
             throw new Error(`KeyManager initialization failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -95,7 +94,7 @@ export class KeyManager {
         }
     }
 
-    private async loadKeys(): Promise<void> {
+    public async loadKeys(): Promise<void> {
         try {
             const files = await fs.readdir(this.keypath);
             this.keys.clear();
@@ -129,4 +128,22 @@ export class KeyManager {
         });
         return keyData;
     }
+
+
+
+    public async deleteKey(keyname: string): Promise<boolean> {
+        try {
+            const filePath = join(this.keypath, `${keyname.trim()}.json`);
+            await fs.access(filePath);
+            await fs.unlink(filePath);
+            return true
+        } catch (error) {
+            if (error === 'ENOENT') {
+                log.warn(`File for key "${keyname}" not found on disk`);
+                return true;
+            }
+            throw new Error(`Failed to delete key "${keyname}": ${error}`);
+        }
+    }
+
 }
