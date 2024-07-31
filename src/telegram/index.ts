@@ -20,17 +20,30 @@ export class Telegram {
         this.bot = new Bot(token);
         this.actions = actions;
         this.database = new DatabaseManager();
-        this.bot.on("callback_query:data", this.handleVoting.bind(this)); 
+        this.bot.on("callback_query:data", this.handleCallbackQuery.bind(this)); 
     }
 
-  
+    private async handleCallbackQuery(ctx: Context): Promise<void> {
+        if (!ctx.callbackQuery?.data) {
+            await this.handleVoteError(ctx, new Error("Invalid callback query"));
+            return;
+        }
+
+        const data = ctx.callbackQuery.data.split(":");
+        if (data[0] === "vote") {
+            await this.handleVoting(ctx);
+        } else if (data[0] === "confirm" || data[0] === "cancel") {
+            await this.handleVoteConfirmation(ctx);
+        }
+    }
+
     private async handleVoting(ctx: Context): Promise<void> {
         if (!ctx.callbackQuery?.data) {
             await this.handleVoteError(ctx, new Error("Invalid callback query"));
             return;
         }
 
-        const [proposalId, chainname, vote] = ctx.callbackQuery.data.split(":");
+        const [_, proposalId, chainname, vote] = ctx.callbackQuery.data.split(":");
         const username = ctx.from?.username;
         const messageId = ctx.callbackQuery.message?.message_id;
 
@@ -40,7 +53,46 @@ export class Telegram {
         }
 
         try {
-            await this.processVote(proposalId, chainname, vote, username, messageId, ctx);
+            await ctx.answerCallbackQuery();
+
+            await ctx.reply(`Are you sure you want to vote ${vote} on proposal ${proposalId}?`, {
+                reply_markup: {
+                    inline_keyboard: [
+                        [
+                            { text: "Confirm", callback_data: `confirm:${proposalId}:${chainname}:${vote}` },
+                            { text: "Cancel", callback_data: `cancel:${proposalId}:${chainname}:${vote}` }
+                        ]
+                    ]
+                },
+                reply_to_message_id: messageId
+            });
+        } catch (error) {
+            await this.handleVoteError(ctx, error);
+        }
+    }
+
+    private async handleVoteConfirmation(ctx: Context): Promise<void> {
+        if (!ctx.callbackQuery?.data) {
+            await this.handleVoteError(ctx, new Error("Invalid callback query"));
+            return;
+        }
+
+        const [action, proposalId, chainname, vote] = ctx.callbackQuery.data.split(":");
+        const username = ctx.from?.username;
+        const messageId = ctx.callbackQuery.message?.message_id;
+
+        if (!proposalId || !chainname || !vote || !username || !messageId) {
+            await this.handleVoteError(ctx, new Error("Incomplete vote data"));
+            return;
+        }
+
+        try {
+            if (action === "confirm") {
+                await this.processVote(proposalId, chainname, vote, username, messageId, ctx);
+                await ctx.editMessageText("Your vote has been confirmed and processed.");
+            } else if (action === "cancel") {
+                await ctx.editMessageText("Your vote has been cancelled.");
+            }
         } catch (error) {
             await this.handleVoteError(ctx, error);
         }
@@ -120,15 +172,10 @@ export class Telegram {
             return [];
         }
     }
-        private async startProposalMonitoring2(): Promise<void>{
-            console.log("hello")
-        }
-
 
     private async startProposalMonitoring(): Promise<void> {
         const interval = Number(ENV.MONITORING_INTERVAL) * 60000;
         log.info(`Bot started. Monitoring proposals every ${ENV.MONITORING_INTERVAL} minutes...`);
-
 
         setInterval(async () => {
             for (const action of this.actions) {
@@ -238,11 +285,11 @@ export class Telegram {
 
     private createVotingKeyboard(proposalId: string, chainName: string): InlineKeyboard {
         return new InlineKeyboard()
-            .text("Yes", `${proposalId}:${chainName}:yes`)
-            .text("No", `${proposalId}:${chainName}:no`)
+            .text("Yes", `vote:${proposalId}:${chainName}:yes`)
+            .text("No", `vote:${proposalId}:${chainName}:no`)
             .row()
-            .text("No with veto", `${proposalId}:${chainName}:veto`)
-            .text("Abstain", `${proposalId}:${chainName}:abstain`);
+            .text("No with veto", `vote:${proposalId}:${chainName}:veto`)
+            .text("Abstain", `vote:${proposalId}:${chainName}:abstain`);
     }
 
     private async handleVoteError(ctx: Context, error: unknown): Promise<void> {
