@@ -4,7 +4,7 @@ import info from "../package.json"
 
 export let ENV = {
     HOME_DIR_PATH: Bun.env.HOME_DIR || join(os.homedir(), `.${info.name}`),
-    TAG_IN_REPLAY: Bun.env.TAG_IN_RELAY || "",
+    TAG_IN_REPLAY: Bun.env.TAG_IN_REPLAY || "",
     TELEGRAM_BOT_ID: Bun.env.TELEGRAM_BOT_TOKEN,
     METADATA_ON_VOTES: Bun.env.METADATA || "",
     MONITORING_INTERVAL : Bun.env.MONITORING_INTERVAL || 5
