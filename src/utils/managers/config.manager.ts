@@ -121,6 +121,21 @@ export class ConfigManager {
   }
 
 
+  public getDefaultVoteType(chainId: string): string | undefined {
+    try {
+        const network = this.config.network.find((n) => n.chain_id === chainId);
+        if (!network) {
+            log.warn(`No network found for chain ID: ${chainId}`);
+            return undefined;
+        }
+        return network.authz.default_vote_option as "yes" | "no" | "abstain" | "veto";
+    } catch (error) {
+        log.error(`Error getting default vote type: ${error instanceof Error ? error.message : String(error)}`);
+        return undefined;
+    }
+}
+
+
   public getChainNetInfoById(chainId: string): Network | undefined {
     try {
       const network = this.config.network.find((n) => n.chain_id === chainId);

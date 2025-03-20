@@ -33,7 +33,7 @@ export default async function startBot(): Promise<void> {
                     network.decimals,
                     network.authz.granter,
                     config.getAuthVoteType(network.chain_id)!,
-                    config.getAuthExecType(network.chain_id)!
+                    config.getAuthExecType(network.chain_id)!,
                 );
 
                 const chatId = config.getTelegramChatByLabel(network.telegram_label);
@@ -50,7 +50,8 @@ export default async function startBot(): Promise<void> {
                     chain_id: network.chain_id,
                     chain_name: network.name,
                     proposal_explorer: network.explorer.proposal,
-                    transaction_explorer: network.explorer.tx
+                    transaction_explorer: network.explorer.tx,
+                    default_vote_option: config.getDefaultVoteType(network.chain_id)!,
                 };
             } catch (error) {
                 log.error(`Failed to load Actionables for network ${network.name}:`, error);

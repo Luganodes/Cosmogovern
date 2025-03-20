@@ -38,6 +38,7 @@ telegram_label = "proposal"
 
 [network.authz]
 granter = ""
+default_vote_option=yes # yes, no , abstain and veto 
 v1_vote_type = true
 v1_exec_type = false
 
