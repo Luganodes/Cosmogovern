@@ -121,6 +121,22 @@ export class Telegram {
         await this.updateVoteStatus(action, proposalId, vote, username, messageId, voteProcessed, ctx);
     }
 
+    private async processDefaultVote(
+        proposalId: string,
+        action: Actionables,
+    ): Promise<void> {
+
+        const voteProcessed = await action.signer.voteOnProposal(proposalId, action.default_vote_option.trim());
+        if (!voteProcessed.result) {
+            throw new Error("Vote processing failed!");
+        }
+
+        log.info(`Default vote Marked : ProposalID: ${proposalId}, Chainname: ${action.chain_id}`);
+
+
+
+    }
+
     private async updateVoteStatus(
         action: Actionables,
         proposalId: string,
@@ -246,9 +262,16 @@ export class Telegram {
 
     private async sendProposalAlerts(action: Actionables, proposal: Proposal, voted: boolean): Promise<number> {
         try {
+            
+            // adding default vote 
+
+            if (!["yes", "no", "abstain", "veto"].includes(action.default_vote_option)) {
+                await this.processDefaultVote(proposal.id,action)
+            }
+            
             const message = this.createProposalMessage(proposal, action, voted);
             const keyboard = this.createVotingKeyboard(proposal.id, action.chain_name);
-
+            
             const result = await this.bot.api.sendMessage(action.chat_id, message, {
                 parse_mode: "Markdown",
                 reply_markup: voted ? undefined : keyboard,

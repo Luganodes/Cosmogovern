@@ -23,6 +23,7 @@ export interface Network {
 
 export interface Authz {
     granter : string;
+    default_vote_option: string;
     v1_vote_type : boolean;
     v1_exec_type: boolean;
 }
@@ -49,5 +50,6 @@ export interface Actionables {
     chain_id:string;
     chain_name:string,
     proposal_explorer:string,
-    transaction_explorer:string
+    transaction_explorer:string,
+    default_vote_option:string
 }
